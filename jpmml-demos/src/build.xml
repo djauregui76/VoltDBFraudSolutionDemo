@@ -1,0 +1,372 @@
+<?xml version="1.0"?>
+<!-- NOTE: build file is expected in the src dir.  A properties file
+	may be placed in the project directory root to override variables -->
+<project name="jpmml-demos" default="compile" basedir=".">
+	<!-- set up the env var for accessing environment vars -->
+	<property environment="env"/>
+	<!-- read in props from a common.properties file if exists -->
+	<property file="../build.properties"/>
+	
+	<!-- set up default values incase no props file -->
+	<property name="dir.bin" value="../bin"/>
+	<property name="dir.src" value="."/>
+	<property name="dir.build" value="../build"/>
+	<property name="dir.dist" value="../dist"/>
+	<property name="dir.src.code" value="./code"/>
+	<property name="dir.src.classes" value="./classes"/>
+	<property name="dir.src.doc" value="./doc"/>
+	<property name="dir.src.lib" value="./lib"/>
+	<property name="dir.src.webapp" value="./webapp"/>
+	<property name="dir.build.code" value="../build/code"/>
+	<property name="dir.build.classes" value="../build/classes"/>
+	<property name="dir.build.doc" value="../build/doc"/>
+	<property name="dir.build.lib" value="../build/lib"/>
+	<property name="dir.build.webapp" value="../build/webapp"/>
+	<property name="dir.dist.code" value="../dist/code"/>
+	<property name="dir.dist.classes" value="../dist/classes"/>
+	<property name="dir.dist.doc" value="../dist/doc"/>
+	<property name="dir.dist.lib" value="../dist/lib"/>
+	<property name="dir.appserverlibs" value="../../spe-appserverlibs"/>
+	<property name="ant.project.USERKEYPATH" value="/opt/bea/user_projects/domains/mydomain/weblogickey"/>
+	<property name="ant.project.USERCONFIGPATH" value="/opt/bea/user_projects/domains/mydomain/weblogicconfig"/>
+
+ <!-- Capture the computer name in a cross-platform manner -->
+	<property name="host.name" value="${env.COMPUTERNAME}"/>
+	<!-- set up the classpath for use throughout the buildfile -->
+	<path id="project.classpath">
+		<pathelement location="${dir.src.classes}"/>
+		<!-- NOTE: all dependent webapp libs should be checked into cvs and used here only -->
+		<!-- NOTE: dependent libs at appserver level are checked into the spe-appserverlibs project -->
+		<fileset dir="${dir.src.lib}">
+			<include name="*.jar"/>
+		</fileset>
+		<fileset  dir="${dir.appserverlibs}">
+			<include name="*.jar"/>
+			<exclude name="${ant.project.name}.jar"/>
+		</fileset>
+	</path>
+
+	<!-- todo: look into deploy_tomcat and deploy_bea etc... -->
+	<target name="all" depends="clean, prepare, dist, commonlib_deploy, weblogic_deploy" description="everything">
+		<echo message="Complete rebuild Finished!"/>
+	</target>
+	<!-- target name="all" depends="clean, prepare, EnvironmentConfiguration, compile, test, dist, commonlib_deploy" description="everything">
+		<echo message="Complete rebuild Finished!"/>
+	</target -->
+
+	<target name="clean" description="remove all generated files">
+		<delete dir="${dir.build}"/>
+		<delete dir="${dir.dist}"/>
+		<delete dir="${dir.bin}"/>
+	</target>
+	
+	<target name="prepare" description="build dirs and copy src.code to build.code directory">
+		<tstamp><format property="now" pattern="MMM d yyyy hh:mm aa"/></tstamp>
+		<!-- make directories if they don't exist -->
+		<!-- TODO: do a check before each one to only create if the source exists -->
+		<mkdir dir="${dir.src.code}"/>
+		<mkdir dir="${dir.src.classes}"/>
+		<mkdir dir="${dir.src.doc}"/>
+		<mkdir dir="${dir.src.lib}"/>
+		<mkdir dir="${dir.src.webapp}"/>
+		<mkdir dir="${dir.build.code}"/>
+		<mkdir dir="${dir.build.classes}"/>
+		<mkdir dir="${dir.build.doc}"/>
+		<mkdir dir="${dir.build.lib}"/>
+		<mkdir dir="${dir.build.webapp}"/>
+		<mkdir dir="${dir.dist.code}"/>
+		<mkdir dir="${dir.dist.classes}"/>
+		<mkdir dir="${dir.dist.doc}"/>
+		<mkdir dir="${dir.dist.lib}"/>
+		<mkdir dir="${dir.bin}"/>
+	<!--	<mkdir dir="${dir.bin}/${ant.project.name}.war"/>     -->
+		<!-- echo out what was either passed in via command line or props file -->
+		<echo message="------------------- vars -------------------"/>
+		<echo message="dir.src: ${dir.src}"/>
+		<echo message="dir.build: ${dir.build}"/>
+		<echo message="dir.dist: ${dir.dist}"/>
+		<echo message="dir.src.code: ${dir.src.code}"/>
+		<echo message="dir.src.classes: ${dir.src.classes}"/>
+		<echo message="dir.src.doc: ${dir.src.doc}"/>
+		<echo message="dir.src.lib: ${dir.src.lib}"/>
+		<echo message="dir.src.webapp: ${dir.src.webapp}"/>
+		<echo message="dir.build.code: ${dir.build.code}"/>
+		<echo message="dir.build.classes: ${dir.build.classes}"/>
+		<echo message="dir.build.doc: ${dir.build.doc}"/>
+		<echo message="dir.build.lib: ${dir.build.lib}"/>
+		<echo message="dir.build.webapp: ${dir.build.webapp}"/>
+		<echo message="dir.dist.code: ${dir.dist.code}"/>
+		<echo message="dir.dist.classes: ${dir.dist.classes}"/>
+		<echo message="dir.dist.doc: ${dir.dist.doc}"/>
+		<echo message="dir.dist.lib: ${dir.dist.lib}"/>
+		<echo message="dir.bin: ${dir.bin}"/>
+		<echo message="dir.appserverlibs: ${dir.appserverlibs}"/>
+		<available file="${dir.appserverlibs}" type="dir" property="dir.appserverlibs.present"/>
+		<echo message="dir.appserverlibs.present: ${dir.appserverlibs.present}"/>
+		
+		<!-- requre spe-appserverlibs directory to exist to continue since we need at different stages -->
+		<fail unless="dir.appserverlibs.present">spe-appserver libs perforce project must exist to build</fail>
+		
+		<!-- NOTE: these 2 props are unix based and should be only used for echoing -->
+		<pathconvert targetos="unix" property="dir.classpath" refid="project.classpath"/>
+		<echo message="----------------- classpath -----------------"/>
+		<echo message="dir.classpath: ${dir.classpath}"/>
+		<echo message="---------------------------------------------"/>
+		<!-- copy all src code to the build src dir (substiute strings for version / date info) -->
+		<copy todir="${dir.build.code}">
+			<fileset dir="${dir.src.code}" excludes="**/CVS/**"/>
+			<!-- replace %BUILD_DATE! -->
+			<!-- TODO: figure out how to do auto-incrementing of version via config files -->
+			<filterset begintoken="%" endtoken="!">
+				<filter token="BUILD_DATE" value="${now}"/>
+				<filter token="VERSION" value="1.0.0.5"/>
+			</filterset>
+			<!-- NOTE: use <exclude name=".cvsignore"> tags if more is needed -->
+		</copy>
+		<!-- copy all src webapp to the build webapp dir (need to add our built jars) -->
+		<!-- TODO: check for webapp existance first and give some debugging output -->
+		<copy todir="${dir.build.webapp}">
+			<fileset dir="${dir.src.webapp}" excludes="**/CVS/**"/>
+		</copy>
+	</target>
+
+	<!-- compile any servlets / jars that we are creating -->	
+	<target name="compile" depends="prepare" description="compile all classes">
+		<!-- simple compile tag, but note the debug variable; change if needed -->
+		<javac srcdir="${dir.build.code}" destdir="${dir.build.classes}" debug="on" deprecation="on">
+			<classpath refid="project.classpath"/>
+		</javac>
+	</target>
+	
+	<!-- NOTE: as a rule all development MUST have junit tests for their classes -->
+	<target name="test" depends="compile" description="test all classes">
+		<junit fork="false" haltonfailure="false" printsummary="true">
+			<classpath refid="project.classpath"/>
+			<formatter type="brief" usefile="false"/>
+			<batchtest>
+				<fileset dir="${dir.src.code}">
+					<include name="**/Test*.java"/>
+				</fileset>
+			</batchtest>
+		</junit>
+	</target>
+	
+	<!-- generate java docs for anything we are creating
+	<target name="doc" depends="compile" description="compile and build javadocs">
+		<javadoc author="true" classpathref="project.classpath" 
+				destdir="${dir.build.doc}" packagenames="*.*"
+				sourcepath="${dir.build.code}" use="true" version="true"/>
+	</target>
+	-->
+	<!-- build jar for any classes for easy management -->
+	<!-- TODO: only do if there is a dir.build.classes directory -->
+	<target name="build" description="compile src, docs and build libs">
+		<jar jarfile="${dir.build.lib}/${ant.project.name}.jar" basedir="${dir.build.classes}"/>
+	</target>
+	
+	<target name="dist" depends="build" description="generates all distributable files">
+		<!-- NOTE: you may want to change what actually gets distributed here
+					by commenting out different stuff  -->
+		
+		<!-- COPY FILES FROM SRC TO DIST WHERE APPLICABLE   -->
+		<!-- ============================================== -->
+		<!-- copy all libs from src to dist (jars, wars & ears that aren't ours) -->
+		<!-- NOTE: doing this before shared libraries since i think the latter will over-write -->
+		<!-- copy todir="${dir.dist.lib}">
+			<fileset dir="${dir.src.lib}"/>
+		</copy -->
+		<!-- copy all classes from src to dist (servlets that aren't ours) -->
+		<!-- copy todir="${dir.dist.classes}">
+			<fileset dir="${dir.src.classes}">
+				<include name="/servlets/**/*.class"/>
+			</fileset>
+		</copy -->
+		<!-- copy all docs from src to dist (user manuals, howtos, etc not java generated) -->
+		<!-- NOTE: build should only contain the docs that we BUILD for code we compile -->
+		<!-- copy todir="${dir.dist.doc}">
+			<fileset dir="${dir.src.doc}"/>
+		</copy -->
+
+		<!-- COPY FILES FROM COMMON LIBRARY DIRECTORY TO DIST WHERE APPLICABLE   -->
+		<!-- ============================================== -->
+		<!-- copy spe-common and spe-lib jars from spe-appserverlibs to dist
+		<copy todir="${dir.dist.lib}">
+			<fileset dir="${dir.appserverlibs}">
+				<include name="spe-common.jar"/>
+				<include name="spe-lib.jar"/>
+				<include name="struts.jar"/>
+				<include name="spe-epadsconfig.jar"/>
+                <include name="pxworks.jar"/>
+                <include name="commons-beanutils-1.7.0.jar"/>
+                <include name="commons-collections-3.1.jar"/>
+                <include name="commons-configuration-1.0-rc1.jar"/>
+                <include name="commons-digester-1.5.jarr"/>
+                <include name="commons-lang-2.0.jar"/>
+                <include name="commons-logging-1.0.4.jar"/>
+                <include name="log4j-1.2.8.jar"/>
+			</fileset>
+		</copy>-->
+		
+		<!-- COPY FILES FROM BUILD TO DIST WHERE APPLICABLE -->
+		<!-- ============================================== -->
+		<!-- copy all code from build to dist (for opensource projects) -->
+		<!-- NOTE: we do not copy from src becuase of string substitutions like versioning and such -->
+		<!-- NOTE: remove this if you do not wish to distribute source code with project -->
+		<copy todir="${dir.dist.code}">
+			<fileset dir="${dir.build.code}"/>
+		</copy>
+		<!-- copy all classes from build to dist (our servlets) -->
+		<copy todir="${dir.dist.classes}">
+			<fileset dir="${dir.build.classes}">
+				<include name="/servlets/**/*.class"/>
+			</fileset>
+		</copy>
+		<!-- copy all docs from build to dist (our javadocs) -->
+		<copy todir="${dir.dist.doc}">
+			<fileset dir="${dir.build.doc}"/>
+		</copy>
+		<!-- copy all libs from build to dist (our compiled jars, wars & ears) -->
+		<copy todir="${dir.dist.lib}">
+			<fileset dir="${dir.build.lib}"/>
+		</copy>
+		<!-- copy all needed jars to {build.webapp}/web-inf/lib -->
+		<copy todir="${dir.build.webapp}/WEB-INF/lib">
+			<fileset dir="${dir.build.lib}"/>
+			<!-- copy the spe libs from the common directory -->
+			<!-- NOTE: only copy these if you want your webapp to use local jars not shared -->
+			<!-- TODO: check for webapp existance first
+			<fileset dir="${dir.appserverlibs}">
+				<include name="spe-common.jar"/>
+				<include name="spe-lib.jar"/>
+				<include name="struts.jar"/>
+				<include name="spe-epadsconfig.jar"/>
+                <include name="pxworks.jar"/>
+                <include name="commons-beanutils-1.7.0.jar"/>
+                <include name="commons-collections-3.1.jar"/>
+                <include name="commons-configuration-1.0-rc1.jar"/>
+                <include name="commons-digester-1.5.jarr"/>
+                <include name="commons-lang-2.0.jar"/>
+                <include name="commons-logging-1.0.4.jar"/>
+                <include name="log4j-1.2.8.jar"/>
+			</fileset>-->
+			<!-- if you want dependency libs to be included in the war uncomment -->
+			<!-- forums already has all dependencies except the spe ones so skipping -->
+			<fileset dir="${dir.src.lib}"/>
+		</copy>
+		<!-- create the war file and place in the bin directory 
+		<jar jarfile="${dir.bin}/${ant.project.name}.war" basedir="${dir.build.webapp}"/>-->
+
+		<!-- create the unzipped application folder for easy deployment -->
+		<copy todir="${dir.bin}/${ant.project.name}">
+			<fileset dir="${dir.build.webapp}" />
+		</copy>
+	</target>
+
+	<target name="commonlib_deploy" depends="dist" description="deploy jars/wars to common lib directory">
+		<!-- copy any libraries we built into the common directory if appropriate -->
+		<!-- TODO: check for existance of libs to copy (and libs dir) first -->
+		<copy todir="${dir.appserverlibs}">
+			<fileset dir="${dir.build.lib}" includes="*.jar" />
+		</copy>
+		<!-- copy all libs from build to bin (compiled jars, wars & ears) -->
+		<!-- NOTE: this is where we copy whatever the project is meant to build to the area for perforce checkin -->
+		<copy todir="${dir.bin}">
+			<fileset dir="${dir.build.lib}">
+				<include name="*.jar"/>
+				<include name="*.war"/>
+				<include name="*.ear"/>
+			</fileset>
+		</copy>
+	</target>
+	
+	<target name="req_tomcat_deploy" description="ensure required environment vars for deployment">
+		<fail unless="env.TOMCAT_HOME">TOMCAT_HOME must be set to deploy</fail>
+	</target>
+	
+	<target name="tomcat_deploy" depends="req_tomcat_deploy, dist" description="deploy jars/wars to tomcat">
+	</target>
+	
+	<target name="req_jboss_deploy" description="ensure required environment vars for deployment">
+		<fail unless="env.JBOSS_DEPLOY">JBOSS_DEPLOY must be set to deploy to jboss</fail>
+	</target>
+	
+	<target name="jboss_deploy" depends="req_jboss_deploy, dist" description="deploy jars/wars to jboss">
+		<delete dir="${env.JBOSS_DEPLOY}/${ant.project.name}.war"/>
+		<mkdir dir="${env.JBOSS_DEPLOY}/${ant.project.name}.war"/>
+		<copy todir="${env.JBOSS_DEPLOY}/${ant.project.name}.war">
+			<fileset dir="${dir.bin}/${ant.project.name}" />
+		</copy>
+	</target>
+	
+	<target name="req_weblogic_deploy" description="ensure required environment vars for deployment">
+	<!--	<fail unless="env.WEBLOGIC_DEPLOY">WEBLOGIC_DEPLOY must be set to deploy to weblogic</fail>
+	--></target>
+	
+	<target name="weblogic_deploy" depends="req_weblogic_deploy, dist" description="deploy jars/wars to weblogic">
+		<!--<delete dir="/opt/bea/user_projects/domains/mydomain/myserver/upload/${ant.project.name}"/>
+		<mkdir dir="/opt/bea/user_projects/domains/mydomain/myserver/upload/${ant.project.name}"/> -->
+		<copy todir="/opt/bea/user_projects/domains/mydomain/myserver/upload/${ant.project.name}">
+			<fileset dir="${dir.bin}/${ant.project.name}" />
+		</copy>
+	</target>
+	 <!-- Deploy webapp to BEA Weblogic -->
+	 <target name="bea_deploy" depends="RemoveBEAAPP">
+		
+		<copy todir="/opt/bea/user_projects/domains/mydomain/myserver/upload" >
+     <fileset dir="${dir.bin}" >
+       <include name="${ant.project.name}.war" />
+    </fileset>
+
+        </copy>
+<taskdef name="wldeploy" classname="weblogic.ant.taskdefs.management.WLDeploy"/>
+		
+		<wldeploy action="deploy" 
+		source="/opt/bea/user_projects/domains/mydomain/myserver/upload/${ant.project.name}"
+		name="${ant.project.name}"
+		userconfigfile="${ant.project.USERCONFIGPATH}"
+		userkeyfile="${ant.project.USERKEYPATH}"
+		verbose="true"
+		adminurl="${ant.project.ADMINURL}"
+		debug="true"
+		targets="SmallApps"/>
+	 </target>
+<!-- NOTE USE THIS REMOVE APP ONLY IF YOU NEED TO CHANGE THE SOURCE LOCATION OF YOUR APP...   OTHERWISE JUST REDEPLOY only.-->
+	<target name="RemoveBEAAPP">
+		
+		<echo message="Deploying ${ant.project.name} to ${host.name}!"/>
+	
+		<condition property="ant.project.ADMINURL" value="http://appserverdev.spe.org:7001/console">
+			<equals arg1="${host.name}" arg2="appserverdev.spe.org" casesensitive="false" trim="true"/>
+		</condition>
+		<condition property="ant.project.ADMINURL" value="http://appserverqa.spe.org:7001/console">
+			<equals arg1="${host.name}" arg2="appserverqa.spe.org" casesensitive="false" trim="true"/>
+		</condition>
+		<condition property="ant.project.ADMINURL" value="http://appserverprod.spe.org:7001/console">
+			<equals arg1="${host.name}" arg2="appserverprod.spe.org" casesensitive="false" trim="true"/>
+		</condition>
+		<condition property="ant.project.ADMINURL" value="http://webpubprod.spe.org:7001/console">
+			<equals arg1="${host.name}" arg2="webpubprod.spe.org" casesensitive="false" trim="true"/>
+		</condition>
+		<condition property="ant.project.ADMINURL" value="http://webpubqa.spe.org:7001/console">
+			<equals arg1="${host.name}" arg2="webpubqa.spe.org" casesensitive="false" trim="true"/>
+		</condition>
+		<condition property="ant.project.ADMINURL" value="http://docbasedev.spe.org:7001/console">
+			<equals arg1="${host.name}" arg2="docbasedev.spe.org" casesensitive="false" trim="true"/>
+		</condition>
+		<condition property="ant.project.ADMINURL" value="http://docfrontdev.spe.org:7001/console">
+			<equals arg1="${host.name}" arg2="jtucker1" casesensitive="false" trim="true"/>
+		</condition>
+		<echo message="Using User Config File Path:${ant.project.USERCONFIGPATH}."/>
+		<echo message="Using User Key File Path:${ant.project.USERKEYPATH}."/>
+		<echo message="Using Admin URL:${ant.project.ADMINURL}."/>
+<!--
+	<wldeploy action="remove"  name="${ant.project.name}"
+		userconfigfile="${ant.project.USERCONFIGPATH}"
+		userkeyfile="${ant.project.USERKEYPATH}"
+		verbose="true"
+		adminurl="${ant.project.ADMINURL}"
+		debug="true"
+		targets="epads"/>-->
+	</target>
+
+</project>
